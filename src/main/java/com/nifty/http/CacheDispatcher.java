@@ -1,6 +1,7 @@
 package com.nifty.http;
 
 import android.os.SystemClock;
+import android.util.Log;
 import com.nifty.http.cache.Cache;
 
 import java.util.Queue;
@@ -10,7 +11,7 @@ import java.util.Queue;
  */
 public class CacheDispatcher {
 
-	private static final int DEFAULT_CORE_POOL_SIZE = 1;
+	private static final int DEFAULT_CORE_POOL_SIZE = 4;
 
 	private final Cache mCache;
 
@@ -19,6 +20,8 @@ public class CacheDispatcher {
 	private final NetworkDispatcher networkDispatcher;
 
 	private final PriorityThreadPool executor;
+
+	private Object lock = new Object();
 
 	public CacheDispatcher(NetworkDispatcher networkDispatcher, Cache mCache, ResponseDelivery mDelivery) {
 		this.networkDispatcher = networkDispatcher;
@@ -29,11 +32,14 @@ public class CacheDispatcher {
 
 	}
 
-	//TODO  sync
-	private synchronized void init() {
+	//  sync
+	private void init() {
 		new Thread() {
 			@Override public void run() {
-				mCache.initialize();
+				synchronized (lock) {
+					mCache.initialize();
+				}
+
 			}
 		}.start();
 
@@ -51,53 +57,62 @@ public class CacheDispatcher {
 		}
 		executor.execute(new Runnable() {
 			@Override public void run() {
-				//	addTrafficStatsTag(request);
-				long startTimeMs = SystemClock.elapsedRealtime();
-				// If the request has been canceled, don't bother dispatching it.
-				if (request.isCanceled()) {
-					return;
-				}
-				// Attempt to retrieve this item from cache.
-				Cache.Entry entry = mCache.get(request.getCacheKey());
-				if (entry == null) {
-					// Cache miss; send off to the network dispatcher.
-					networkDispatcher.add(request);
-					return;
-				}
-				// If it is completely expired, just send it to the network.
-				if (entry.isExpired()) {
-					request.setCacheEntry(entry);
-					networkDispatcher.add(request);
-					return;
-				}
+				synchronized (lock) {
+					//	addTrafficStatsTag(request);
+					long startTimeMs = SystemClock.elapsedRealtime();
+					// If the request has been canceled, don't bother dispatching it.
+					if (request.isCanceled()) {
+						request.finish("cache-discard-canceled");
+						return;
+					}
 
-				Response response = request.parseNetworkResponse(
-						new NetworkResponse(entry.data, entry.responseHeaders));
+					// Attempt to retrieve this item from cache.
+					Cache.Entry entry = mCache.get(request.getCacheKey());
 
-				if (!entry.refreshNeeded()) {
-					// Completely unexpired cache hit. Just deliver the response.
-					mDelivery.postResponse(request, response);
-				} else {
-					// Soft-expired cache hit. We can deliver the cached response,
-					// but we need to also send the request to the network for
-					// refreshing.
-					request.setCacheEntry(entry);
+					Log.e("x", "Cache entry    ==   " + entry);
+					if (entry == null) {
+						// Cache miss; send off to the network dispatcher.
+						networkDispatcher.add(request);
+						mDelivery.postNoLastCache(request);
+						return;
+					}
 
-					// Mark the response as intermediate.
-					response.intermediate = true;
+					Response response = Response.parseNetworkResponse(
+							new NetworkResponse(entry.data, entry.responseHeaders), request.shouldCache(),
+							request.isCacheLastResponse());
 
-					// Post the intermediate response back to the user and have
-					// the delivery then forward the request along to the network.
-					mDelivery.postResponse(request, response, new Runnable() {
-						@Override
-						public void run() {
-							try {
-								mNetworkQueue.put(request);
-							} catch (InterruptedException e) {
-								// Not much we can do about this.
-							}
+					if (request.isCacheLastResponse()) {
+						mDelivery.postLastCache(request, response);
+					}
+
+					//只有2中情况能进来这种，一种 ttl 一种cache last
+					//如果使用了last cache 已经返回了。
+					//缓存如果使用ttl+etag，那么过去的请求已经加入net请求，没过期不需要请求。
+					//如果没有使用ttl+etag，就在加入到网络请求一次
+					//ttl  和softTtl 看代码是一样的，eoe的帖子说是因为解析图片之类的可能时间会唱导致过期，这次不考虑
+					//缓存区分是否是last cache or ttl+etag cache
+
+					if (request.shouldCache() && !entry.isWayward()) {
+						// If it is completely expired, just send it to the network.
+
+						Log.e("x", "etag      ==    " + entry.etag);
+						Log.e("x", "serverDate      ==    " + entry.serverDate);
+						Log.e("x", "ttl      ==    " + entry.ttl);
+
+						if (entry.isExpired()) {
+							Log.e("x", "------- ttl cache add net ---------");
+							request.setCacheEntry(entry);
+							networkDispatcher.add(request);
+						} else {
+							Log.e("x", "------- ttl cache hit ---------");
+							mDelivery.postResponse(request, response);
 						}
-					});
+
+					} else {
+						Log.e("x", "------- wayward cache add net ---------");
+						networkDispatcher.add(request);
+					}
+
 				}
 
 			}

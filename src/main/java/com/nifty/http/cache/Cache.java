@@ -9,6 +9,7 @@ import java.util.Map;
 public interface Cache {
 	/**
 	 * Retrieves an entry from the cache.
+	 *
 	 * @param key Cache key
 	 * @return An ll in the event of a cache miss
 	 */
@@ -16,7 +17,8 @@ public interface Cache {
 
 	/**
 	 * Adds or replaces an entry to the cache.
-	 * @param key Cache key
+	 *
+	 * @param key   Cache key
 	 * @param entry Data to store and metadata for cache coherency, TTL, etc.
 	 */
 	public void put(String key, Entry entry);
@@ -29,13 +31,15 @@ public interface Cache {
 
 	/**
 	 * Invalidates an entry in the cache.
-	 * @param key Cache key
+	 *
+	 * @param key        Cache key
 	 * @param fullExpire True to fully expire the entry, false to soft expire
 	 */
 	public void invalidate(String key, boolean fullExpire);
 
 	/**
 	 * Removes an entry from the cache.
+	 *
 	 * @param key Cache key
 	 */
 	public void remove(String key);
@@ -49,33 +53,58 @@ public interface Cache {
 	 * Data and metadata for an entry returned by the cache.
 	 */
 	public static class Entry {
-		/** The data returned from cache. */
+		/**
+		 * The data returned from cache.
+		 */
 		public byte[] data;
 
-		/** ETag for cache coherency. */
+		/**
+		 * ETag for cache coherency.
+		 */
 		public String etag;
 
-		/** Date of this response as reported by the server. */
+		/**
+		 * Date of this response as reported by the server.
+		 */
 		public long serverDate;
 
-		/** TTL for this record. */
+		/**
+		 * TTL for this record.
+		 */
 		public long ttl;
 
-		/** Soft TTL for this record. */
-		public long softTtl;
+		/**
+		 * 0 true ,1 false
+		 */
+		public int wayward;
 
-		/** Immutable response headers as received from server; must be non-null. */
+		//		/**
+		//		 * Soft TTL for this record.
+		//		 */
+		//		public long softTtl;
+
+		/**
+		 * Immutable response headers as received from server; must be non-null.
+		 */
 		public Map<String, String> responseHeaders = Collections.emptyMap();
 
-		/** True if the entry is expired. */
+		/**
+		 * True if the entry is expired.
+		 */
 		public boolean isExpired() {
 			return this.ttl < System.currentTimeMillis();
 		}
 
-		/** True if a refresh is needed from the original data source. */
-		public boolean refreshNeeded() {
-			return this.softTtl < System.currentTimeMillis();
+		public boolean isWayward() {
+			return this.wayward == 0;
 		}
+
+		//		/**
+		//		 * True if a refresh is needed from the original data source.
+		//		 */
+		//		public boolean refreshNeeded() {
+		//			return this.softTtl < System.currentTimeMillis();
+		//		}
 	}
 
 }

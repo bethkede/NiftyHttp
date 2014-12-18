@@ -1,7 +1,5 @@
 package com.nifty.http;
 
-import android.util.Log;
-import com.nifty.http.NetworkResponse;
 import com.nifty.http.cache.Cache;
 import org.apache.http.impl.cookie.DateParseException;
 import org.apache.http.impl.cookie.DateUtils;
@@ -20,8 +18,10 @@ public class HttpHeaderParser {
 	 * @param response The network response to parse headers from
 	 * @return a cache entry for the given response, or null if the response is not cacheable.
 	 */
-	public static Cache.Entry parseCacheHeaders(NetworkResponse response) {
+	public static Cache.Entry parseCacheHeaders(NetworkResponse response, boolean shouldCache, boolean wayward) {
 		long now = System.currentTimeMillis();
+
+		boolean haveCache = true;
 
 		Map<String, String> headers = response.headers;
 
@@ -30,67 +30,80 @@ public class HttpHeaderParser {
 		long softExpire = 0;
 		long maxAge = 0;
 		boolean hasCacheControl = false;
-
 		String serverEtag = null;
-		String headerValue;
+		//--------------------
+		if (shouldCache) {
+			String headerValue;
+			headerValue = headers.get("Date");
+			if (headerValue != null) {
+				serverDate = parseDateAsEpoch(headerValue);
+			}
 
-		headerValue = headers.get("Date");
-		if (headerValue != null) {
-			serverDate = parseDateAsEpoch(headerValue);
-		}
+			//	    Expires 表示存在时间，允许客户端在这个时间之前不去检查（发请求），等同max-age的
+			//	    效果。但是如果同时存在，则被Cache-Control的max-age覆盖
 
-		//	    Expires 表示存在时间，允许客户端在这个时间之前不去检查（发请求），等同max-age的
-		//	    效果。但是如果同时存在，则被Cache-Control的max-age覆盖
+			headerValue = headers.get("Cache-Control");
 
-		headerValue = headers.get("Cache-Control");
+			if (headerValue != null) {
+				hasCacheControl = true;
+				String[] tokens = headerValue.split(",");
+				for (int i = 0; i < tokens.length; i++) {
+					String token = tokens[i].trim();
 
-		Log.e("x", "headerValue    ==    " + headerValue);
-		if (headerValue != null) {
-			hasCacheControl = true;
-			String[] tokens = headerValue.split(",");
-			for (int i = 0; i < tokens.length; i++) {
-				String token = tokens[i].trim();
+					if (token.equals("no-cache") || token.equals("no-store")) {
+						haveCache = false;
 
-				Log.e("x", "token    ==    " + token);
-				if (token.equals("no-cache") || token.equals("no-store")) {
-					return null;
-				} else if (token.startsWith("max-age=")) {
-					try {
-						maxAge = Long.parseLong(token.substring(8));
-					} catch (Exception e) {
+					} else if (token.startsWith("max-age=")) {
+						try {
+							maxAge = Long.parseLong(token.substring(8));
+						} catch (Exception e) {
+						}
+					} else if (token.equals("must-revalidate") || token.equals("proxy-revalidate")) {
+						maxAge = 0;
 					}
-				} else if (token.equals("must-revalidate") || token.equals("proxy-revalidate")) {
-					maxAge = 0;
 				}
+			}
+
+			headerValue = headers.get("Expires");
+
+			if (headerValue != null) {
+				serverExpires = parseDateAsEpoch(headerValue);
+			}
+
+			serverEtag = headers.get("ETag");
+
+			// Cache-Control takes precedence over an Expires header, even if both exist and Expires
+			// is more restrictive.
+			if (hasCacheControl) {
+				softExpire = now + maxAge * 1000;
+			} else if (serverDate > 0 && serverExpires >= serverDate) {
+				// Default semantic for Expire header in HTTP specification is softExpire.
+				softExpire = now + (serverExpires - serverDate);
 			}
 		}
 
-		headerValue = headers.get("Expires");
-
-		if (headerValue != null) {
-			serverExpires = parseDateAsEpoch(headerValue);
-		}
-
-		serverEtag = headers.get("ETag");
-
-		// Cache-Control takes precedence over an Expires header, even if both exist and Expires
-		// is more restrictive.
-		if (hasCacheControl) {
-			softExpire = now + maxAge * 1000;
-		} else if (serverDate > 0 && serverExpires >= serverDate) {
-			// Default semantic for Expire header in HTTP specification is softExpire.
-			softExpire = now + (serverExpires - serverDate);
-		}
-
 		Cache.Entry entry = new Cache.Entry();
-		entry.data = response.data;
-		entry.etag = serverEtag;
-		entry.softTtl = softExpire;
-		entry.ttl = entry.softTtl;
-		entry.serverDate = serverDate;
-		entry.responseHeaders = headers;
 
-		return entry;
+		if (shouldCache && haveCache) {
+			entry.data = response.data;
+			entry.etag = serverEtag;
+			entry.ttl = softExpire;
+			entry.wayward = 1;
+			entry.serverDate = serverDate;
+			entry.responseHeaders = headers;
+			return entry;
+		} else if (wayward) {
+			entry.data = response.data;
+			entry.etag = "";
+			entry.ttl = 0;
+			entry.wayward = 0;
+			entry.serverDate = 0;
+			entry.responseHeaders = headers;
+			return entry;
+		} else {
+			return null;
+		}
+
 	}
 
 	/**

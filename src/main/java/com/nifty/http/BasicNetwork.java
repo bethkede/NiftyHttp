@@ -1,6 +1,7 @@
 package com.nifty.http;
 
 import android.os.SystemClock;
+import android.util.Log;
 import com.nifty.http.cache.Cache;
 import com.nifty.http.error.*;
 import org.apache.http.*;
@@ -34,18 +35,18 @@ public class BasicNetwork {
 			HttpResponse httpResponse = null;
 			byte[] responseContents = null;
 			Map<String, String> responseHeaders = Collections.emptyMap();
-
 			try {
+
+				// Gather headers.
 				Map<String, String> headers = new HashMap<String, String>();
 				addCacheHeaders(headers, request.getCacheEntry());
 				httpResponse = mHttpStack.performRequest(request, headers);
 				StatusLine statusLine = httpResponse.getStatusLine();
 				int statusCode = statusLine.getStatusCode();
-
 				responseHeaders = convertHeaders(httpResponse.getAllHeaders());
-
+				// Handle cache validation.
 				if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-
+					Log.e("x", "----------statusCode 304---------");
 					Cache.Entry entry = request.getCacheEntry();
 					if (entry == null) {
 						return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, null,
@@ -53,7 +54,7 @@ public class BasicNetwork {
 								SystemClock.elapsedRealtime() - requestStart);
 					}
 
-					// A HTTP 304  response does not have all header fields. We
+					// A HTTP 304 response does not have all header fields. We
 					// have to use the header fields from the cache entry plus
 					// the new ones from the response.
 					// http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.5
@@ -63,6 +64,7 @@ public class BasicNetwork {
 							SystemClock.elapsedRealtime() - requestStart);
 				}
 
+				// Some responses such as 204s do not have content.  We must check.
 				if (httpResponse.getEntity() != null) {
 					responseContents = entityToBytes(httpResponse.getEntity());
 				} else {
@@ -71,17 +73,20 @@ public class BasicNetwork {
 					responseContents = new byte[0];
 				}
 
+				// if the request is slow, log it.
 				long requestLifetime = SystemClock.elapsedRealtime() - requestStart;
+
 				if (statusCode < 200 || statusCode > 299) {
 					throw new IOException();
 				}
 				return new NetworkResponse(statusCode, responseContents, responseHeaders, false,
 						SystemClock.elapsedRealtime() - requestStart);
-
 			} catch (SocketTimeoutException e) {
+				Log.e("x", "------------------SocketTimeoutException--------------------------");
 				attemptRetryOnException("socket", request, new TimeoutError());
 			} catch (ConnectTimeoutException e) {
-				attemptRetryOnException("socket", request, new TimeoutError());
+				Log.e("x", "------------------ConnectTimeoutException--------------------------");
+				attemptRetryOnException("connection", request, new TimeoutError());
 			} catch (MalformedURLException e) {
 				throw new RuntimeException("Bad URL " + request.getUrl(), e);
 			} catch (IOException e) {

@@ -11,6 +11,10 @@ public interface ResponseDelivery {
 	 */
 	public void postResponse(Request request, Response response);
 
+	public void postLastCache(Request request, Response response);
+
+	public void postNoLastCache(Request request);
+
 	/**
 	 * Parses a response from the network or cache and delivers it. The provided
 	 * Runnable will be executed after delivery.

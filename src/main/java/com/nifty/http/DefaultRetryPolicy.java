@@ -16,6 +16,7 @@
 
 package com.nifty.http;
 
+import android.util.Log;
 import com.nifty.http.error.VolleyError;
 
 /**
@@ -111,6 +112,8 @@ public class DefaultRetryPolicy implements RetryPolicy {
 	 */
 	@Override
 	public void retry(VolleyError error) throws VolleyError {
+
+		Log.e("x", " ---------retry--------");
 		mCurrentRetryCount++;
 		mCurrentTimeoutMs += (mCurrentTimeoutMs * mBackoffMultiplier);
 		if (!hasAttemptRemaining()) {

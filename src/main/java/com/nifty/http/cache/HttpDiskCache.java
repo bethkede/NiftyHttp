@@ -8,7 +8,7 @@ import java.util.*;
 /**
  * Created by BaoRui on 2014/12/12.
  */
-public class DiskBasedCache implements Cache {
+public class HttpDiskCache implements Cache {
 
 	/**
 	 * Map of the Key, CacheHeader pairs
@@ -52,7 +52,7 @@ public class DiskBasedCache implements Cache {
 	 * @param rootDirectory       The root directory of the cache.
 	 * @param maxCacheSizeInBytes The maximum size of the cache in bytes.
 	 */
-	public DiskBasedCache(File rootDirectory, int maxCacheSizeInBytes) {
+	public HttpDiskCache(File rootDirectory, int maxCacheSizeInBytes) {
 		mRootDirectory = rootDirectory;
 		mMaxCacheSizeInBytes = maxCacheSizeInBytes;
 	}
@@ -63,7 +63,7 @@ public class DiskBasedCache implements Cache {
 	 *
 	 * @param rootDirectory The root directory of the cache.
 	 */
-	public DiskBasedCache(File rootDirectory) {
+	public HttpDiskCache(File rootDirectory) {
 		this(rootDirectory, DEFAULT_DISK_USAGE_BYTES);
 	}
 
@@ -153,7 +153,7 @@ public class DiskBasedCache implements Cache {
 	}
 
 	/**
-	 * Invalidates an entry in the cache.
+	 * Invalidates(使无效) an entry in the cache.
 	 *
 	 * @param key        Cache key
 	 * @param fullExpire True to fully expire the entry, false to soft expire
@@ -162,7 +162,7 @@ public class DiskBasedCache implements Cache {
 	public synchronized void invalidate(String key, boolean fullExpire) {
 		Entry entry = get(key);
 		if (entry != null) {
-			entry.softTtl = 0;
+			//			entry.softTtl = 0;
 			if (fullExpire) {
 				entry.ttl = 0;
 			}
@@ -335,10 +335,12 @@ public class DiskBasedCache implements Cache {
 		 */
 		public long ttl;
 
-		/**
-		 * Soft TTL for this record.
-		 */
-		public long softTtl;
+		private int wayward;
+
+		//		/**
+		//		 * Soft TTL for this record.
+		//		 */
+		//		public long softTtl;
 
 		/**
 		 * Headers from the response resulting in this cache entry.
@@ -360,7 +362,8 @@ public class DiskBasedCache implements Cache {
 			this.etag = entry.etag;
 			this.serverDate = entry.serverDate;
 			this.ttl = entry.ttl;
-			this.softTtl = entry.softTtl;
+			this.wayward = entry.wayward;
+			//			this.softTtl = entry.softTtl;
 			this.responseHeaders = entry.responseHeaders;
 		}
 
@@ -384,7 +387,8 @@ public class DiskBasedCache implements Cache {
 			}
 			entry.serverDate = readLong(is);
 			entry.ttl = readLong(is);
-			entry.softTtl = readLong(is);
+			entry.wayward = readInt(is);
+			//			entry.softTtl = readLong(is);
 			entry.responseHeaders = readStringStringMap(is);
 			return entry;
 		}
@@ -398,7 +402,8 @@ public class DiskBasedCache implements Cache {
 			e.etag = etag;
 			e.serverDate = serverDate;
 			e.ttl = ttl;
-			e.softTtl = softTtl;
+			e.wayward = wayward;
+			//			e.softTtl = softTtl;
 			e.responseHeaders = responseHeaders;
 			return e;
 		}
@@ -413,7 +418,8 @@ public class DiskBasedCache implements Cache {
 				writeString(os, etag == null ? "" : etag);
 				writeLong(os, serverDate);
 				writeLong(os, ttl);
-				writeLong(os, softTtl);
+				writeInt(os, wayward);
+				//				writeLong(os, softTtl);
 				writeStringStringMap(responseHeaders, os);
 				os.flush();
 				return true;

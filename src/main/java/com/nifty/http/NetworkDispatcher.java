@@ -1,6 +1,7 @@
 package com.nifty.http;
 
 import android.os.SystemClock;
+import android.util.Log;
 import com.nifty.http.cache.Cache;
 import com.nifty.http.error.VolleyError;
 
@@ -39,22 +40,35 @@ public class NetworkDispatcher {
 				long startTimeMs = SystemClock.elapsedRealtime();
 				try {
 					if (request.isCanceled()) {
+						request.finish("network-discard-cancelled");
 						return;
 					}
 
 					NetworkResponse networkResponse = mNetwork.performRequest(request);
 
-					Response response = request.parseNetworkResponse(networkResponse);
+					if (networkResponse.notModified && request.hasHadResponseDelivered()) {
+						request.finish("not-modified");
+						return;
+					}
 
-					if (request.shouldCache() && response.cacheEntry != null) {
+					Response response = Response.parseNetworkResponse(networkResponse,request.shouldCache() , request.isCacheLastResponse());
+
+					if (response.cacheEntry != null && (request.shouldCache() || request.isCacheLastResponse())) {
+
+						Log.e("x", "----------put to cache----------------");
 						mCache.put(request.getCacheKey(), response.cacheEntry);
 					}
+
+					request.markDelivered();
+					mDelivery.postResponse(request, response);
 
 				} catch (VolleyError volleyError) {
 					volleyError.setNetworkTimeMs(SystemClock.elapsedRealtime() - startTimeMs);
 					parseAndDeliverNetworkError(request, volleyError);
 				} catch (Exception e) {
-					e.printStackTrace();
+					VolleyError volleyError = new VolleyError(e);
+					volleyError.setNetworkTimeMs(SystemClock.elapsedRealtime() - startTimeMs);
+					mDelivery.postError(request, volleyError);
 				}
 
 			}
@@ -62,7 +76,7 @@ public class NetworkDispatcher {
 	}
 
 	private void parseAndDeliverNetworkError(Request request, VolleyError error) {
-		error = request.parseNetworkError(error);
+		//		error = Response.parseNetworkError(error);
 		mDelivery.postError(request, error);
 	}
 

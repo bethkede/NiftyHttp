@@ -27,27 +27,33 @@ public class Request {
 	private final String mUrl;
 	private final Map<String, String> params;
 	private final Map<String, String> headers;
-	private boolean mShouldCache = true;
+	private boolean mShouldCache;
+	private boolean isCacheLastResponse;
 	private RetryPolicy mRetryPolicy;
 	private Object mTag;
-	private final Response.ErrorListener mErrorListener;
-	private final Response.FinishListener mFinishListener;
+
+	private final Response.ResponseListener listener;
+
+	private final Response.CacheListener cacheListener;
 	//sets
 	private boolean mCanceled = false;
 	private boolean mResponseDelivered = false;
 	private Cache.Entry mCacheEntry = null;
+
+	private NiftyHttp niftyHttp;
 
 	private Request(Builder builder) {
 		mMethod = builder.mMethod;
 		priority = builder.priority;
 		mUrl = builder.urlString;
 		mShouldCache = builder.mShouldCache;
+		isCacheLastResponse = builder.isCacheLastResponse;
 		mRetryPolicy = builder.mRetryPolicy;
 		mTag = builder.mTag;
 		params = builder.params;
 		headers = builder.headers;
-		mErrorListener = builder.mErrorListener;
-		mFinishListener = builder.mFinishListener;
+		listener = builder.listener;
+		cacheListener = builder.cacheListener;
 
 	}
 
@@ -90,6 +96,10 @@ public class Request {
 
 	public final boolean shouldCache() {
 		return mShouldCache;
+	}
+
+	public final boolean isCacheLastResponse() {
+		return isCacheLastResponse;
 	}
 
 	public Priority getPriority() {
@@ -146,11 +156,14 @@ public class Request {
 
 	//--------------------------------------------------------------------------
 
-	void finish(final String tag) {
-		if (mRequestQueue != null) {
-			mRequestQueue.finish(this);
-		}
+	public void setNiftyHttp(NiftyHttp niftyHttp) {
+		this.niftyHttp = niftyHttp;
+	}
 
+	void finish(final String tag) {
+		if (niftyHttp != null) {
+			niftyHttp.finish(this);
+		}
 	}
 
 	public void markDelivered() {
@@ -166,26 +179,28 @@ public class Request {
 		return this;
 	}
 
-	protected void deliverResponse(Response response) {
-		if (mFinishListener != null) {
-			mFinishListener.onResponse(response);
+	public void deliverResponse(Response response) {
+		if (listener != null) {
+			listener.onFinish(response);
 		}
 	}
 
 	public void deliverError(VolleyError error) {
-		if (mErrorListener != null) {
-			mErrorListener.onErrorResponse(error);
+		if (listener != null) {
+			listener.onError(error);
 		}
 	}
 
-	protected Response parseNetworkResponse(NetworkResponse networkResponse) {
-		Response response = new Response(networkResponse.data, networkResponse.headers, networkResponse.statusCode);
-		return response;
-
+	public void deliverCacheResponse(Response response) {
+		if (cacheListener != null) {
+			cacheListener.onCache(response);
+		}
 	}
 
-	protected VolleyError parseNetworkError(VolleyError volleyError) {
-		return volleyError;
+	public void deliverNoCache() {
+		if (cacheListener != null) {
+			cacheListener.onNoCache();
+		}
 	}
 
 	public static class Builder {
@@ -196,17 +211,19 @@ public class Request {
 		private Map<String, String> params;
 		private Map<String, String> headers;
 		private boolean mShouldCache;
+		private boolean isCacheLastResponse;
 		private int timeoutMs = -1;
 		private int retriesTime = -1;
 		private RetryPolicy mRetryPolicy;
 		private Object mTag;
-		private Response.ErrorListener mErrorListener;
-		private Response.FinishListener mFinishListener;
+		private Response.ResponseListener listener;
+		private Response.CacheListener cacheListener;
 
 		public Builder() {
 			this.mMethod = Method.GET;
 			this.priority = Priority.NORMAL;
 			this.mShouldCache = false;
+			this.isCacheLastResponse = false;
 			params = new HashMap<String, String>();
 			headers = new HashMap<String, String>();
 			this.mShouldCache = false;
@@ -236,6 +253,11 @@ public class Request {
 
 		public Builder priority(Priority priority) {
 			this.priority = priority;
+			return this;
+		}
+
+		public Builder isCacheLastResponse(boolean isCacheLastResponse) {
+			this.isCacheLastResponse = isCacheLastResponse;
 			return this;
 		}
 
@@ -275,13 +297,13 @@ public class Request {
 			return this;
 		}
 
-		public Builder errorListener(Response.ErrorListener mErrorListener) {
-			this.mErrorListener = mErrorListener;
+		public Builder listener(Response.ResponseListener listener) {
+			this.listener = listener;
 			return this;
 		}
 
-		public Builder finishListener(Response.FinishListener mFinishListener) {
-			this.mErrorListener = mErrorListener;
+		public Builder cacheListener(Response.CacheListener cacheListener) {
+			this.cacheListener = cacheListener;
 			return this;
 		}
 
