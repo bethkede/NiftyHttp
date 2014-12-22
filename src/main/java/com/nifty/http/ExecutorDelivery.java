@@ -1,7 +1,6 @@
 package com.nifty.http;
 
 import android.os.Handler;
-import android.util.Log;
 import com.nifty.http.error.VolleyError;
 
 import java.util.concurrent.Executor;
@@ -43,48 +42,39 @@ public class ExecutorDelivery implements ResponseDelivery {
 
 	@Override
 	public void postResponse(Request request, Response response) {
-		postResponse(request, response, null);
+
+		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, false));
 	}
 
 	@Override public void postLastCache(Request request, Response response) {
-		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, null, true));
+		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, true));
 	}
 
 	@Override public void postNoLastCache(Request request) {
-		mResponsePoster.execute(new ResponseDeliveryRunnable(request, null, null, true));
-	}
-
-	@Override
-	public void postResponse(Request request, Response response, Runnable runnable) {
-		request.markDelivered();
-		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, runnable, false));
+		mResponsePoster.execute(new ResponseDeliveryRunnable(request, null, true));
 	}
 
 	@Override
 	public void postError(Request request, VolleyError error) {
 		Response response = Response.error(error);
-		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, null, false));
+		mResponsePoster.execute(new ResponseDeliveryRunnable(request, response, false));
 	}
 
 	/**
 	 * A Runnable used for delivering network responses to a listener on the
 	 * main thread.
 	 */
-	@SuppressWarnings("rawtypes")
 	private class ResponseDeliveryRunnable implements Runnable {
 		private final Request mRequest;
 		private final Response mResponse;
-		private final Runnable mRunnable;
 		private final boolean isLastCache;
 
-		public ResponseDeliveryRunnable(Request request, Response response, Runnable runnable, boolean isLastCache) {
+		public ResponseDeliveryRunnable(Request request, Response response, boolean isLastCache) {
 			mRequest = request;
 			mResponse = response;
-			mRunnable = runnable;
 			this.isLastCache = isLastCache;
 		}
 
-		@SuppressWarnings("unchecked")
 		@Override
 		public void run() {
 			// If this request has canceled, finish it and don't deliver.
@@ -107,17 +97,6 @@ public class ExecutorDelivery implements ResponseDelivery {
 					mRequest.deliverError(mResponse.error);
 				}
 
-				// If this is an intermediate response, add a marker, otherwise we're done
-				// and the request can be finished.
-				//TODO
-				if (!mResponse.intermediate) {
-					mRequest.finish("done");
-				}
-
-				// If we have been provided a post-delivery runnable, run it.
-				if (mRunnable != null) {
-					mRunnable.run();
-				}
 			}
 
 		}

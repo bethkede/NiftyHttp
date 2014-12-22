@@ -328,7 +328,7 @@ public class HttpDiskCache implements Cache {
 		/**
 		 * Date of this response as reported by the server.
 		 */
-		public long serverDate;
+		public long lastModified;
 
 		/**
 		 * TTL for this record.
@@ -360,7 +360,7 @@ public class HttpDiskCache implements Cache {
 			this.key = key;
 			this.size = entry.data.length;
 			this.etag = entry.etag;
-			this.serverDate = entry.serverDate;
+			this.lastModified = entry.lastModified;
 			this.ttl = entry.ttl;
 			this.wayward = entry.wayward;
 			//			this.softTtl = entry.softTtl;
@@ -385,7 +385,7 @@ public class HttpDiskCache implements Cache {
 			if (entry.etag.equals("")) {
 				entry.etag = null;
 			}
-			entry.serverDate = readLong(is);
+			entry.lastModified = readLong(is);
 			entry.ttl = readLong(is);
 			entry.wayward = readInt(is);
 			//			entry.softTtl = readLong(is);
@@ -400,7 +400,7 @@ public class HttpDiskCache implements Cache {
 			Entry e = new Entry();
 			e.data = data;
 			e.etag = etag;
-			e.serverDate = serverDate;
+			e.lastModified = lastModified;
 			e.ttl = ttl;
 			e.wayward = wayward;
 			//			e.softTtl = softTtl;
@@ -416,7 +416,7 @@ public class HttpDiskCache implements Cache {
 				writeInt(os, CACHE_MAGIC);
 				writeString(os, key);
 				writeString(os, etag == null ? "" : etag);
-				writeLong(os, serverDate);
+				writeLong(os, lastModified);
 				writeLong(os, ttl);
 				writeInt(os, wayward);
 				//				writeLong(os, softTtl);

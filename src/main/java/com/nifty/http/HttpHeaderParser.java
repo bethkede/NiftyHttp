@@ -12,6 +12,9 @@ import java.util.Map;
  */
 public class HttpHeaderParser {
 
+	//Expires 表示存在时间，允许客户端在这个时间之前不去检查（发请求），等同max-age的
+	//效果。但是如果同时存在，则被Cache-Control的max-age覆盖。
+
 	/**
 	 * Extracts a {@link com.nifty.http.cache.Cache.Entry} from a {@link com.nifty.http.NetworkResponse}.
 	 *
@@ -26,6 +29,7 @@ public class HttpHeaderParser {
 		Map<String, String> headers = response.headers;
 
 		long serverDate = 0;
+		long lastModified = 0;
 		long serverExpires = 0;
 		long softExpire = 0;
 		long maxAge = 0;
@@ -70,6 +74,11 @@ public class HttpHeaderParser {
 				serverExpires = parseDateAsEpoch(headerValue);
 			}
 
+			headerValue = headers.get("Last-Modified");
+			if (headerValue != null) {
+				lastModified = parseDateAsEpoch(headerValue);
+			}
+
 			serverEtag = headers.get("ETag");
 
 			// Cache-Control takes precedence over an Expires header, even if both exist and Expires
@@ -89,7 +98,7 @@ public class HttpHeaderParser {
 			entry.etag = serverEtag;
 			entry.ttl = softExpire;
 			entry.wayward = 1;
-			entry.serverDate = serverDate;
+			entry.lastModified = lastModified;
 			entry.responseHeaders = headers;
 			return entry;
 		} else if (wayward) {
@@ -97,7 +106,7 @@ public class HttpHeaderParser {
 			entry.etag = "";
 			entry.ttl = 0;
 			entry.wayward = 0;
-			entry.serverDate = 0;
+			entry.lastModified = 0;
 			entry.responseHeaders = headers;
 			return entry;
 		} else {

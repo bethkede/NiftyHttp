@@ -66,6 +66,10 @@ public class NiftyHttp {
 
 	}
 
+	public void clearCache() {
+
+	}
+
 	/**
 	 * Adds a Request to the dispatch queue.
 	 *

@@ -46,7 +46,6 @@ public class BasicNetwork {
 				responseHeaders = convertHeaders(httpResponse.getAllHeaders());
 				// Handle cache validation.
 				if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-					Log.e("x", "----------statusCode 304---------");
 					Cache.Entry entry = request.getCacheEntry();
 					if (entry == null) {
 						return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, null,
@@ -72,9 +71,6 @@ public class BasicNetwork {
 					// no-content request.
 					responseContents = new byte[0];
 				}
-
-				// if the request is slow, log it.
-				long requestLifetime = SystemClock.elapsedRealtime() - requestStart;
 
 				if (statusCode < 200 || statusCode > 299) {
 					throw new IOException();
@@ -135,8 +131,8 @@ public class BasicNetwork {
 		if (entry.etag != null) {
 			headers.put("If-None-Match", entry.etag);
 		}
-		if (entry.serverDate > 0) {
-			Date refTime = new Date(entry.serverDate);
+		if (entry.lastModified > 0) {
+			Date refTime = new Date(entry.lastModified);
 			headers.put("If-Modified-Since", DateUtils.formatDate(refTime));
 		}
 	}

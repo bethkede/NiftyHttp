@@ -66,7 +66,7 @@ public interface Cache {
 		/**
 		 * Date of this response as reported by the server.
 		 */
-		public long serverDate;
+		public long lastModified;
 
 		/**
 		 * TTL for this record.

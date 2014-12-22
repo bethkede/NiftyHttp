@@ -35,8 +35,6 @@ public class Response {
 
 	public Cache.Entry cacheEntry;
 
-	public boolean intermediate = false;
-
 	public final VolleyError error;
 
 	public boolean isSuccess() {
@@ -79,7 +77,7 @@ public class Response {
 
 	protected static Response parseNetworkResponse(NetworkResponse response, boolean shouldCache, boolean wayward) {
 
-		return Response.success(response, HttpHeaderParser.parseCacheHeaders(response,shouldCache, wayward));
+		return Response.success(response, HttpHeaderParser.parseCacheHeaders(response, shouldCache, wayward));
 
 	}
 

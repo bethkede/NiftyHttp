@@ -58,6 +58,12 @@ public class CacheDispatcher {
 		executor.execute(new Runnable() {
 			@Override public void run() {
 				synchronized (lock) {
+
+					if (request.isClearCacheRequest()) {
+						mCache.clear();
+						return;
+					}
+
 					//	addTrafficStatsTag(request);
 					long startTimeMs = SystemClock.elapsedRealtime();
 					// If the request has been canceled, don't bother dispatching it.
@@ -96,7 +102,7 @@ public class CacheDispatcher {
 						// If it is completely expired, just send it to the network.
 
 						Log.e("x", "etag      ==    " + entry.etag);
-						Log.e("x", "serverDate      ==    " + entry.serverDate);
+						Log.e("x", "lastModified      ==    " + entry.lastModified);
 						Log.e("x", "ttl      ==    " + entry.ttl);
 
 						if (entry.isExpired()) {

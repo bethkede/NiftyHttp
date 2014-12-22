@@ -1,5 +1,6 @@
 package com.nifty.http;
 
+import android.os.Build;
 import com.nifty.http.error.AuthFailureError;
 import org.apache.http.*;
 import org.apache.http.entity.BasicHttpEntity;
@@ -9,9 +10,7 @@ import org.apache.http.message.BasicStatusLine;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
@@ -47,6 +46,7 @@ public class HurlStack implements HttpStack {
 
 		URL parsedUrl = new URL(url);
 		HttpURLConnection connection = openConnection(parsedUrl, request);
+		fixBugIfExist(connection);
 		for (String headerName : map.keySet()) {
 			//Adds the given property to the request header
 			connection.addRequestProperty(headerName, map.get(headerName));
@@ -101,6 +101,13 @@ public class HurlStack implements HttpStack {
 		return (HttpURLConnection) url.openConnection();
 	}
 
+	private void fixBugIfExist(HttpURLConnection conn) {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.FROYO) {
+			System.setProperty("http.keepAlive", "false");
+			conn.setRequestProperty("Connection", "close");
+		}
+	}
+
 	private void setConnectionParametersForRequest(HttpURLConnection connection,
 			Request request) throws IOException {
 		switch (request.getMethod()) {
@@ -138,21 +145,83 @@ public class HurlStack implements HttpStack {
 		}
 	}
 
+	/**
+	 * //设置Content-Type  charset 用什么格式提交
+	 * //application/x-www-form-urlencoded和multipart/form-data，
+	 * // 默认为application/x-www-form-urlencoded。
+	 * // 当action为get时候，浏览器用x-www-form-urlencoded的编码方式把form数据转换成一个字串（name1=value1&name2=value2...），然后把这个字串append到url后面，用?分割，加载这个新的url。
+	 * // 当action为post时候，浏览器把form数据封装到http body中，然后发送到server。
+	 * // 如果没有type=file的控件，用默认的application/x-www-form-urlencoded就可以了。
+	 * // 但是如果有type=file的话，就要用到multipart/form-data了。浏览器会把整个表单以控件为单位分割，
+	 * // 并为每个部分加上Content-Disposition(form-data或者file),
+	 * // Content-Type(默认为text/plain),name(控件name)等信息，并加上分割符(boundary)。
+	 *
+	 * @param connection
+	 * @param request
+	 * @throws IOException
+	 */
+
+
+
+
+	final static String endLine = "\r\n";
+	//大文件上传建议使用FTP
+
 	private static void addBodyIfExists(HttpURLConnection connection, Request request)
 			throws IOException {
-		//params
-		byte[] body = request.getBody();
-		if (body != null) {
-			//输入
+		byte[] body = request.getParamsBodyNoFile();
+		List<FileParam> fileParams = request.getFileParams();
+		if (body != null || (fileParams != null && fileParams.size() > 0)) {
 			connection.setDoOutput(true);
-			//设置Content-Type  charset 用什么格式提交
-			//application/x-www-form-urlencoded和multipart/form-data，默认为application/x-www-form-urlencoded。 当action为get时候，浏览器用x-www-form-urlencoded的编码方式把form数据转换成一个字串（name1=value1&name2=value2...），然后把这个字串append到url后面，用?分割，加载这个新的url。 当action为post时候，浏览器把form数据封装到http body中，然后发送到server。 如果没有type=file的控件，用默认的application/x-www-form-urlencoded就可以了。 但是如果有type=file的话，就要用到multipart/form-data了。浏览器会把整个表单以控件为单位分割，并为每个部分加上Content-Disposition(form-data或者file),Content-Type(默认为text/plain),name(控件name)等信息，并加上分割符(boundary)。
 			connection.addRequestProperty(HEADER_CONTENT_TYPE, request.getBodyContentType());
+			connection.setRequestProperty("Charset", "UTF-8");
 			DataOutputStream out = new DataOutputStream(connection.getOutputStream());
-			//写入body
-			out.write(body);
-			out.close();
+			if (request.getMethod() == Method.POST && fileParams != null && fileParams.size() > 0) {
+				out.write(("--" + request.getBoundary() + endLine).getBytes());
+				byte[] fileBody = request.getParamsBodyHaveFile();
+				out.write(fileBody);
+				File file = null;
+				for (FileParam fileParam : fileParams) {
+					file = fileParam.file;
+					if (file != null && file.exists()) {
+						out.write((endLine + "--" + request.getBoundary() + endLine).getBytes());
+						FileInputStream fis = null;
+						try {
+							out.write(("Content-Disposition: form-data; name=\"" + fileParam.key
+									+ "\"; filename=\"" + fileParam.filename + "\""
+									+ endLine)
+									.getBytes());
+							out.write(("Content-Type: " + fileParam.fileType + endLine + endLine)
+									.getBytes());
+							fis = new FileInputStream(file);
+							byte[] buffer = new byte[8192];
+							int flag;
+							while ((flag = fis.read(buffer)) != -1) {
+								out.write(buffer, 0, flag);
+							}
+							fis.close();
+						} catch (IOException e) {
+							if (fis != null) {
+								fis.close();
+							}
+							throw e;
+						}
+					}
+				}
+				out.write((endLine + "--" + request.getBoundary() + endLine).getBytes());
+				out.flush();
+				out.close();
+
+			} else {
+				//写入body
+				out.write(body);
+				out.flush();
+				out.close();
+			}
 		}
+
+		//params
+
 	}
 
 	private static HttpEntity entityFromConnection(HttpURLConnection connection) {

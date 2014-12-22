@@ -46,8 +46,20 @@ public class NetworkDispatcher {
 
 					NetworkResponse networkResponse = mNetwork.performRequest(request);
 
-					if (networkResponse.notModified && request.hasHadResponseDelivered()) {
+					if (networkResponse.notModified) {
+
+						Cache.Entry entry = mCache.get(request.getCacheKey());
+						Response response = Response.parseNetworkResponse(
+								new NetworkResponse(entry.data, entry.responseHeaders), request.shouldCache(),
+								request.isCacheLastResponse());
+						mDelivery.postResponse(request, response);
+
+						if (request.shouldCache() && response.cacheEntry != null) {
+							mCache.put(request.getCacheKey(), response.cacheEntry);
+						}
+
 						request.finish("not-modified");
+
 						return;
 					}
 
@@ -59,7 +71,6 @@ public class NetworkDispatcher {
 						mCache.put(request.getCacheKey(), response.cacheEntry);
 					}
 
-					request.markDelivered();
 					mDelivery.postResponse(request, response);
 
 				} catch (VolleyError volleyError) {
